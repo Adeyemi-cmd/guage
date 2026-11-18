@@ -1,6 +1,6 @@
 # ROADMAP: Gauge
 
-Last updated: 2026-11-09T14:40Z (update Drips Wave 11 submission packet and sibling comparison)
+Last updated: 2026-11-18T00:00Z (task 7.7: exclude the zero-weight master from reachability)
 Roadmap version: 3
 
 This file is the single source of truth for remaining work. It is read before every task and updated after every change.
@@ -40,7 +40,7 @@ The repository is 100% ready when every task in Phases 0 to 6 is done and every 
 | 4 | Dogfood and release v0.1.0 | 2 | 9 | 22% |
 | 5 | v0.2 features | 3 | 11 | 27% |
 | 6 | Release v0.2.0 and community | 0 | 5 | 0% |
-| 7 (backlog) | Backlog | 0 | 4 | 0% |
+| 7 (backlog) | Backlog | 3 | 7 | 42% |
 | **Phases 0 to 6** | **Readiness total** | **56** | **79** | **70%** |
 | Gates | G1 to G10 | 3 | 10 | 30% |
 <!-- PROGRESS:END -->
@@ -226,6 +226,9 @@ Constraint on the two remaining experimental tasks: Gauge never builds or submit
 - [ ] **7.2** Claimable balances, liquidity pool shares and sponsorship analysis.
 - [ ] **7.3** Alert integrations (probably never; JSON and CI cover it).
 - [ ] **7.4** Cross-check issued assets against `stellar.toml` currencies.
+- [x] **7.5** Keep pre-authorized transaction entries out of the standing weight sum, tested at the top tier and beside a signed-payload signer of the same weight. S. Done when: `internal/threshold/preauth_test.go` tables a lone `T...` signer of weight 255 at thresholds 0, 1 and 255, a `T...` of 255 beside a `P...` of 1 at threshold 1, and a `T...` of weight 255 beside a `G` of weight 10, and a build whose filter keeps `SignerPreAuthTx` fails a row. (done 2026-11-18: the new file tables the six cases and asserts `Reachable` false with `MinSigners` `(0, false)` for the lone `T...` at every tier, minimum 1 where the `P...` of 1 carries threshold 1, and minimum 1 at 10 with unreachable at 11 beside the `G` of 10. The shared `signerOf` helper is reused, `threshold.go` is unchanged, and removing the `SignerPreAuthTx` clause from `participating` makes the lone-entry rows fail.)
+- [x] **7.6** Pin the early return in `MinSigners` against an empty list, a lone zero-weight master and a single weight-255 signer. S. Done when: `internal/threshold/minsigners_test.go` tables an empty list at thresholds 0, 1 and 255, a lone weight-0 master at 0, 1 and 255, one weight-1 signer at 0 and 1, and a single weight-255 signer at 1, 254, 255 and 256, and the table fails if the early return moves above the empty check. (done 2026-11-18: the new file tables the twelve cases, every empty and zero-weight row asserts `(0, false)`, the weight-1 rows assert `(1, true)`, the weight-255 rows assert `(1, true)` through 255 and `(0, false)` at 256, and moving the `threshold <= 0` return above the empty check makes the empty and zero-weight rows fail. `threshold.go` is unchanged.)
+- [x] **7.7** Exclude a zero-weight master from reachability at every tier, including the tiers where an empty candidate list must still authorize nothing. S. Done when: `internal/threshold/zero_weight_test.go` tables a lone weight-0 master at thresholds 0, 1 and 255, pairs it with a weight-5 signer at 0, 5, 6 and 255, skips a negative weight like zero, and a mixed list answers the same as the list without it, and a row fails against a build that filters with `Weight < 0` instead of `Weight <= 0`. (done 2026-11-18: the new file tables the lone master and the zero-plus-weight-5 pair, adds negative-weight rows, and compares the mixed list against the base list at 0, 1, 5, 6 and 255. Every lone-master row asserts `Reachable` false with `MinSigners` `(0, false)`, the pair reaches at 0 and 5 with minimum 1 and is unreachable at 6 and 255, and changing the filter to `Weight < 0` makes the zero-weight rows fail. `threshold.go` and the shared helpers are unchanged.)
 
 ## 6. Dependency map (critical path)
 
@@ -276,6 +279,9 @@ Newest first. One row per merged change.
 
 | Date (UTC) | Change | Tasks |
 |---|---|---|
+| 2026-11-18 | Task 7.7 pins the weight filter at every tier: `internal/threshold/zero_weight_test.go` tables a lone weight-0 master at thresholds 0, 1 and 255, pairs it with a weight-5 signer at 0, 5, 6 and 255, adds negative-weight rows, and compares a mixed list against the same list without the zero and negative entries at 0, 1, 5, 6 and 255. The lone master authorizes nothing with minimum 0, the pair reaches at 0 and 5 with minimum 1 and is unreachable at 6 and 255, and changing the filter to `Weight < 0` makes the zero-weight rows fail. `threshold.go` and the shared helpers are unchanged. `ROADMAP.md` Phase 7 gains 7.7 (backlog 3 of 7), `scripts/generate_issues.sh` gains its backlog row, and the progress table is regenerated. | 7.7 |
+| 2026-11-18 | Task 7.6 pins the order of `MinSigners`' early returns: `internal/threshold/minsigners_test.go` tables an empty list at thresholds 0, 1 and 255, a lone weight-0 master at 0, 1 and 255, one weight-1 signer at 0 and 1, and a single weight-255 signer at 1, 254, 255 and 256. The empty and zero-weight rows assert `(0, false)`, the weight-1 rows `(1, true)`, and the weight-255 signer reaches through the top tier but not 256, so moving the zero-threshold return above the empty check fails a row. `threshold.go` is unchanged. `ROADMAP.md` Phase 7 gains 7.6 (backlog 2 of 6), `scripts/generate_issues.sh` gains its backlog row, and the progress table is regenerated. | 7.6 |
+| 2026-11-18 | Task 7.5 pins the pre-authorized transaction exclusion where the shared table did not reach: `internal/threshold/preauth_test.go` tables a lone `T...` signer of weight 255 at thresholds 0, 1 and 255, a `T...` of 255 beside a `P...` of 1 at threshold 1, and a `T...` of 255 beside a `G` of 10. Each lone entry stays unreachable with a zero minimum, the signed payload carries threshold 1 alone, and the `G` of 10 reaches with minimum 1 at 10 but not at 11, so a filter that keeps `SignerPreAuthTx` fails a row. `threshold.go` is unchanged and the shared `signerOf` helper is reused. `ROADMAP.md` Phase 7 gains 7.5 (backlog 1 of 5), `scripts/generate_issues.sh` gains its backlog row, and the progress table is regenerated. | 7.5 |
 | 2026-11-09 | Updated Drips Wave submission packet (docs/WAVE_SUBMISSION.md) for Wave 11: confirmed 200 unit tests passing, all 16 rules registered, OpenSSF Scorecard at 6.8 with live badge, live documentation site at https://posture-sec.github.io/guage/, dynamic README metric sync, and updated sibling comparison data across org repositories. | none ticked |
 | 2026-11-09 | Finalized project naming by removing all occurrences of "working name" across repository documentation, PRD, architecture, and roadmap files. Implemented dynamic README metrics synchronization (`scripts/sync_readme.py`) generating live Shields.io endpoint JSON files under `site/data/` for 200 tests and 16 rules, and enforced with `--check` in the `roadmap-check` workflow. | none ticked |
 | 2026-11-09 | Add Docs Live badge to README and prominent navigation links to the 7-page live documentation site. | none ticked |
